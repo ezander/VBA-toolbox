@@ -22,26 +22,26 @@ function [posterior,out] = VBA_NLStateSpaceModel(y,u,f_fname,g_fname,dim,options
 % calling the VBA_ReDisplay.m function.
 %
 % IN :
-%   - y: pxn_t mesurements matrix
-%   - u: mxn_t known input matrix (which is required as an argument in
-%   the obvservation/evolution functions, default is empty [])
+%   - y: p x n_t mesurements matrix
+%   - u: m x n_t known input matrix (which is required as an argument in
+%        the obvservation/evolution functions, default is empty [])
 %   - f_fname (resp. g_fname): name/handle of the function that returns the
-%   evolution (resp. observation) of the hidden states.
-%       ! NB: The generic i/o form of these functions has to conform to the
-%       following:
+%     evolution (resp. observation) of the hidden states.
+%     ! NB: The generic i/o form of these functions has to conform to the
+%     following:
 %                  [ fx,dfdx,dfdP ] = fname(x_t,P,u_t,in)
 %                      |_________|
 %                     { varargout }
-%       where:
-%       . x_t, u_t and P are respectively the current hidden state value,
+%     where:
+%     . x_t, u_t and P are respectively the current hidden state value,
 %       the current input value and the evolution/observation parameters
 %       value
-%       . in contains any additional information which has to be passed to
+%     . in contains any additional information which has to be passed to
 %       the functions. For example, it is used to indicate the chosen time
 %       discretization (dt) for evolution functions that derive from a
 %       continuous formulation.
-%       . fx is the current evaluation of the function
-%       . dfdx and dfdP are the matrices containing the gradients of the
+%     . fx is the current evaluation of the function
+%     . dfdx and dfdP are the matrices containing the gradients of the
 %       function w.r.t. the hidden states and the invariant parameters
 %       ! NB: the output of the evolution/observation functions does not
 %       have to provide all above derivatives. For, e.g., the evolution
@@ -49,64 +49,64 @@ function [posterior,out] = VBA_NLStateSpaceModel(y,u,f_fname,g_fname,dim,options
 %       [fx,dfdx,dfdP]. The missing derivatives are automatically computed
 %       using numerical derivation.
 %   - dim: a structure variable containing the dimensions of the 3 sets of
-%   the model's unknown variables:
-%       .n: the dimension of the hidden-states
-%   	.n_theta: the dimension of the vector of evolution parameters theta
-%   	.n_phi: the dimension of the vector of observation parameters phi
+%     the model's unknown variables:
+%     . n: the dimension of the hidden-states
+%   	. n_theta: the dimension of the vector of evolution parameters theta
+%   	. n_phi: the dimension of the vector of observation parameters phi
 %       ! NB: the n_t and p dimensions are derived from the provided
 %        observation matrix 'y' !
 %   - options: user-defined structure containing specific informations
-%   regarding the model, ie (see VBA_check.m):
-%       .priors: a structure variable containing the priors sufficient
+%     regarding the model, ie (see VBA_check.m):
+%     . priors: a structure variable containing the priors sufficient
 %       statistics over the evolution/observation/precision parameters and
 %       hidden-states initial condition (see VBA_priors.m for standard
 %       output)
 %       ! NB: if the prior about the stochastic innovations precision is a
-%        Dirac delta (priors.a_alpha = Inf, priors.b_alpha = 0), the model
-%        becomes a deterministic (ODE) state-space model. This is used
-%        during the initialization of the posterior.
+%       Dirac delta (priors.a_alpha = Inf, priors.b_alpha = 0), the model
+%       becomes a deterministic (ODE) state-space model. This is used
+%       during the initialization of the posterior.
 %       ! NB2: time-dependent covariance structure for both the measurement
 %       and the state noise can be passed to the inversion routine through
 %       the .iQx and .iQy fields (these are cell aray of time-dependent
 %       precision matrices).
-%       .decim: the number of times the evolution function is applied
+%     . decim: the number of times the evolution function is applied
 %       between each time sample {1}. This is used to increase the
 %       micro-time resolution
-%       .microU: a flag determining whether the input u is specified in
+%     . microU: a flag determining whether the input u is specified in
 %       micro-resolution time (1) or in data sampling time ({0}). This is
 %       useful for providing sub-sampling sparse inputs to the system.
-%       .inF: a (possibly structure) variable containing the additional
+%     . inF: a (possibly structure) variable containing the additional
 %       (internal) fixed parameters which may have to be sent to the
 %       evolution function {[]}
-%       .inG: idem for the observation function {[]}
-%       .checkGrads: a flag for eyeballing provided analytical gradients of
+%     . inG: idem for the observation function {[]}
+%     . checkGrads: a flag for eyeballing provided analytical gradients of
 %       the evolution/observation function against automated numerical
 %       derivatives
-%       .updateX0: a flag indicating whether or not the initial conditions
+%     . updateX0: a flag indicating whether or not the initial conditions
 %       should be updated ({1}:yes, 0:no).
-%       .updateHP: a similar flag for the (precision) hyperparameters {1}
-%       .backwardLag: a positive integer that defines the size of the
+%     . updateHP: a similar flag for the (precision) hyperparameters {1}
+%     . backwardLag: a positive integer that defines the size of the
 %       short-sighted backward pass for the hidden states VB update {1}.
 %       NB: if 0, there is no backward pass.
-%       .MaxIter: maximum number of VB iterations {32}
-%       .MinIter: minimum number of VB iterations {1}
-%       .TolFun: minimum absolute increase of the free energy {2e-2}
-%       .DisplayWin: flag to display (1) or not (0) the main display
+%     . MaxIter: maximum number of VB iterations {32}
+%     . MinIter: minimum number of VB iterations {1}
+%     . TolFun: minimum absolute increase of the free energy {2e-2}
+%     . DisplayWin: flag to display (1) or not (0) the main display
 %       window {1}
-%       .gradF: binary variable that flags whether the regularized
+%     . gradF: binary variable that flags whether the regularized
 %       Gauss_newton update scheme optimizes the free energy (1) or the
 %       variational energy ({0}) of each mean-field partition.
-%       .GnMaxIter: maximum number of inner Gauss-Newton iterations {32}
-%       .GnTolFun: minimum relative increase of the variational energy for
+%     . GnMaxIter: maximum number of inner Gauss-Newton iterations {32}
+%     . GnTolFun: minimum relative increase of the variational energy for
 %       the inner regularized Gauss-Newton loops {1e-5}
-%       .GnFigs: flag to display (=1) or not (=0) the Gauss-Newton inner
+%     . GnFigs: flag to display (=1) or not (=0) the Gauss-Newton inner
 %       loops display figures {0}.
-%       .delays: dim.nX1 vector containing the discrete delays for the
+%     . delays: dim.nX1 vector containing the discrete delays for the
 %       evolution function.
 %       NB: nonzero delays induces an embedding of the system, thereby
 %       increasing the computational demand of the inversion. The state
 %       space dimension if multiplied by max(options.delays)+1!
-%       .sources: a structure or array of structures defining the probability 
+%     . sources: a structure or array of structures defining the probability 
 %        distribution of the observation. If the observations are
 %        homogenous, this structure can contain a unique field 'type' whose
 %        value can be: 
@@ -124,13 +124,13 @@ function [posterior,out] = VBA_NLStateSpaceModel(y,u,f_fname,g_fname,dim,options
 %        each defining the distribution type as above, and also containing 
 %        a field 'out' that give the index of the observations covered by the
 %        distribution.
-%       .figName: the name of the display window
+%     . figName: the name of the display window
 %   - in: structure variable containing the output of a previously ran
-%   VBA_NLStateSpaceModel.m routine. Providing this input to the function
-%   allows one to re-start the VB updates from the point where it was
-%   stopped. The required fields are:
-%       .posterior: the posterior structure variable (see above)
-%       .out: the additional output structure of this routine (see above)
+%     VBA_NLStateSpaceModel.m routine. Providing this input to the function
+%     allows one to re-start the VB updates from the point where it was
+%     stopped. The required fields are:
+%     . posterior: the posterior structure variable (see above)
+%     . out: the additional output structure of this routine (see above)
 %
 % OUT:
 %   - posterior: a structure variable whose fields contain the sufficient
